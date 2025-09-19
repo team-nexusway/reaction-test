@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>반응 속도 테스트</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<link href="https://cdn.jsdelivr.net/gh/toss/tossface/dist/tossface.css" rel="stylesheet" type="text/css" />
+    <style>
+        .tossface {
+          font-family: Tossface;
+          font-size: 1.5rem;
+        }
+      </style>
+<style>
+@font-face {
+    font-family: 'IsYun';
+    src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_2202-2@1.0/LeeSeoyun.woff') format('woff');
+    font-weight: normal;
+    font-display: swap;
+}
+
+  :root { --font-main: 'IsYun', 'Noto Sans KR', sans-serif; }
+  body { font-family: var(--font-main); }
+
+  #game { transition: background-color 0.4s ease, transform 0.1s ease, box-shadow 0.3s ease; }
+  #game.clicked { transform: scale(0.98); box-shadow: 0 0 10px rgba(0,0,0,0.5); }
+
+  .modal-bg { background-color: rgba(0, 0, 0, 0.8); }
+  .btn-hover { transition: transform 0.2s ease, background-color 0.2s ease; }
+  .btn-hover:hover { transform: translateY(-2px); opacity:0.85; }
+
+  /* 버튼 색상 */
+  .btn-dark { background-color:#374151; color:white; }       /* 게임 시작 / 확인 */
+  .btn-dark:hover { background-color:#445064; }
+
+  .btn-light { background-color:#374151; color:rgb(255, 255, 255); }      /* 닫기 / 초기화 */
+  .btn-light:hover { background-color:#445064; }
+
+  @keyframes fadeIn { from { opacity:0 } to { opacity:1 } }
+  .animate-fade-in { animation: fadeIn 0.5s ease forwards; }
+</style>
+</head>
+<body class="bg-gray-900 flex flex-col items-center justify-center min-h-screen p-4 text-white">
+
+<!-- 시작 모달 -->
+<div id="startModal" class="fixed inset-0 flex flex-col items-center justify-start modal-bg z-50 pt-16">
+  <div class="bg-gray-800 p-8 rounded-2xl shadow-2xl flex flex-col items-center w-full max-w-sm transform scale-100 transition-transform duration-300">
+    <h1 class="text-3xl font-bold mb-6 text-white">반응 속도 테스트</h1>
+    <div class="w-full flex flex-col items-center">
+      <input id="nickname" type="text" placeholder="닉네임 입력" class="p-3 rounded-lg text-black w-full mb-4 focus:ring-2 focus:ring-gray-200 outline-none"/>
+      <button id="startBtn" class="btn-dark px-6 py-3 rounded-lg w-full text-lg font-bold btn-hover">게임 시작</button>
+    </div>
+    <div class="w-full mt-8">
+      <h2 class="text-2xl font-semibold mb-3 text-center"><span class="tossface">🏆</span> 랭킹보드</h2>
+      <ul id="mainRanking" class="space-y-2 text-center"></ul>
+    </div>
+  </div>
+</div>
+
+<!-- 게임 화면 -->
+<div id="gameScreen" class="hidden flex flex-col items-center w-full max-w-lg animate-fade-in">
+  <div id="gameControls" class="flex flex-col items-center w-full mb-6">
+    <div id="game" class="w-80 h-80 bg-red-600 rounded-2xl flex items-center justify-center cursor-pointer shadow-xl">
+      <span id="gameText" class="text-white text-3xl font-bold select-none text-center">클릭하지 마세요!</span>
+    </div>
+  </div>
+
+  <div id="gameInfo" class="w-full text-center space-y-2 mb-6">
+    <p id="info" class="text-lg">0/5회</p>
+    <p id="reaction" class="text-2xl font-semibold text-white">반응 속도: -</p>
+    <button id="resetBtn" class="btn-light px-6 py-2 rounded-lg btn-hover text-sm">랭킹 초기화</button>
+  </div>
+  
+  <button id="startNewGameBtn" class="hidden btn-dark px-6 py-3 rounded-lg w-full max-w-xs text-lg font-bold btn-hover mb-6">나도 참여하기</button>
+
+  <div class="w-full">
+    <h2 class="text-2xl font-semibold mb-3 text-center"><span class="tossface">🏆</span> 랭킹보드</h2>
+    <ul id="ranking" class="space-y-2 text-center"></ul>
+  </div>
+
+  <div class="w-full mt-8">
+    <h2 class="text-2xl font-semibold mb-3 text-center"><span class="tossface">📊</span> 반응 속도 히스토리</h2>
+    <div class="bg-gray-800 p-4 rounded-xl shadow-lg">
+      <canvas id="chart"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- 자체 팝업 모달 -->
+<div id="popupModal" class="fixed inset-0 flex items-center justify-center modal-bg z-50 hidden">
+  <div class="bg-gray-800 p-6 rounded-2xl shadow-2xl w-full max-w-sm text-center">
+    <h2 id="popupTitle" class="text-xl font-bold text-white mb-4"></h2>
+    <input id="popupInput" type="password" placeholder="" class="p-3 rounded-lg w-full mb-4 focus:ring-2 focus:ring-white outline-none hidden"/>
+    <div class="flex justify-center space-x-3">
+      <button id="popupConfirm" class="btn-dark px-4 py-2 rounded-lg btn-hover font-semibold hidden">확인</button>
+      <button id="popupClose" class="btn-light px-4 py-2 rounded-lg btn-hover font-semibold">닫기</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const startModal = document.getElementById('startModal');
+const startBtn = document.getElementById('startBtn');
+const nicknameInput = document.getElementById('nickname');
+const gameScreen = document.getElementById('gameScreen');
+const gameControls = document.getElementById('gameControls');
+const gameInfo = document.getElementById('gameInfo');
+const startNewGameBtn = document.getElementById('startNewGameBtn');
+const game = document.getElementById('game');
+const gameText = document.getElementById('gameText');
+const info = document.getElementById('info');
+const reaction = document.getElementById('reaction');
+const ranking = document.getElementById('ranking');
+const mainRanking = document.getElementById('mainRanking');
+const resetBtn = document.getElementById('resetBtn');
+
+const popupModal = document.getElementById('popupModal');
+const popupTitle = document.getElementById('popupTitle');
+const popupInput = document.getElementById('popupInput');
+const popupConfirm = document.getElementById('popupConfirm');
+const popupClose = document.getElementById('popupClose');
+
+let attempt = 0;
+const totalAttempts = 5;
+let startTime = 0;
+let reactionTimes = [];
+let waiting = false;
+let timeoutId;
+let playerName = '';
+let chart, chartData;
+const colors = ['#22c55e', '#f97316', '#3b82f6', '#ec4899', '#a855f7'];
+
+// ----------------- 사용자 관리 -----------------
+function getUsers() { return JSON.parse(localStorage.getItem('users')) || {}; }
+function verifyPassword(name, pwd) { const users = getUsers(); return users[name] && users[name].password === pwd; }
+
+// ----------------- 팝업 함수 -----------------
+function showPopup({ title = '', input = false, placeholder = '', onConfirm = null }) {
+  popupTitle.textContent = title;
+  popupInput.value = '';
+  popupInput.placeholder = placeholder;
+  popupInput.classList.toggle('hidden', !input);
+  popupConfirm.classList.toggle('hidden', !input);
+  popupModal.classList.remove('hidden');
+  popupConfirm.onclick = () => { if(onConfirm) onConfirm(popupInput.value); popupModal.classList.add('hidden'); };
+  popupClose.onclick = () => popupModal.classList.add('hidden');
+}
+
+// ----------------- 차트 초기화 -----------------
+function initChart() {
+  const ctx = document.getElementById('chart').getContext('2d');
+  chartData = {
+    labels: [],
+    datasets: [{
+      label: '반응 속도(ms)',
+      data: [],
+      borderColor: colors[0],
+      backgroundColor: 'rgba(34, 197, 94, 0.2)',
+      tension: 0.3,
+      fill: true,
+      pointRadius: 5,
+      pointHoverRadius: 7
+    }]
+  };
+  if (chart) chart.destroy();
+  chart = new Chart(ctx, {
+    type: 'line',
+    data: chartData,
+    options: {
+      responsive:true,
+      maintainAspectRatio:false,
+      scales:{
+        y:{beginAtZero:true,grid:{color:'rgba(255,255,255,0.1)'},ticks:{color:'white'}},
+        x:{grid:{display:false},ticks:{color:'white'}}
+      },
+      plugins:{legend:{labels:{color:'white'}}}
+    }
+  });
+}
+
+// ----------------- 게임 시작/라운드 -----------------
+function startRound() {
+  game.classList.remove('bg-green-600','bg-blue-600');
+  game.classList.add('bg-red-600');
+  gameText.textContent='클릭하지 마세요!';
+  waiting=true;
+  timeoutId=setTimeout(()=>{
+    game.classList.remove('bg-red-600');
+    game.classList.add('bg-green-600');
+    gameText.textContent='클릭!';
+    startTime=performance.now();
+  }, Math.random()*2000+1000);
+}
+
+// ----------------- 게임 종료 -----------------
+function endGame() {
+  const avg=(reactionTimes.reduce((a,b)=>a+b,0)/reactionTimes.length).toFixed(2);
+  reaction.textContent=`평균 반응 속도: ${avg}ms`;
+  saveUserRecord(avg);
+  attempt=0; reactionTimes=[];
+  info.textContent=`0/${totalAttempts}회`;
+  if(chart) chart.destroy();
+  showPopup({ title:'게임 종료! 메인 화면으로 돌아갑니다.' });
+  gameScreen.classList.add('hidden'); startModal.classList.remove('hidden');
+}
+
+// ----------------- 기록 저장 -----------------
+function saveUserRecord(avgScore) {
+  const users=getUsers();
+  if(!users[playerName]) { showPopup({ title:'오류: 사용자 정보가 없습니다.' }); return; }
+  users[playerName].records.push(...reactionTimes);
+  localStorage.setItem('users', JSON.stringify(users));
+  let ranks=JSON.parse(localStorage.getItem('ranking'))||[];
+  const existingIndex=ranks.findIndex(r=>r.name===playerName);
+  if(existingIndex>=0){ if(avgScore<ranks[existingIndex].score) ranks[existingIndex].score=Number(avgScore); }
+  else ranks.push({ name:playerName, score:Number(avgScore) });
+  ranks.sort((a,b)=>a.score-b.score);
+  ranks=ranks.slice(0,5);
+  localStorage.setItem('ranking', JSON.stringify(ranks));
+  renderRanking(ranking); renderRanking(mainRanking);
+}
+
+// ----------------- 랭킹 렌더링 -----------------
+function renderRanking(el){
+  const ranks=JSON.parse(localStorage.getItem('ranking'))||[];
+  el.innerHTML='';
+  ranks.forEach((s,i)=>{
+    const li=document.createElement('li');
+    const button=document.createElement('button');
+    button.textContent=`${i+1}위: ${s.name} - ${s.score}ms`;
+    button.classList.add('p-2','rounded-lg','w-full','text-center','transition-colors','hover:bg-gray-700');
+    button.setAttribute('data-rank-index',i);
+    button.onclick=()=>showUserGraph(i);
+    li.appendChild(button); el.appendChild(li);
+  });
+}
+
+// ----------------- 유저 그래프 보기 -----------------
+function showUserGraph(rankIndex){
+  startModal.classList.add('hidden'); gameScreen.classList.remove('hidden');
+  gameControls.classList.add('hidden'); gameInfo.classList.add('hidden'); startNewGameBtn.classList.remove('hidden');
+  const ranks=JSON.parse(localStorage.getItem('ranking'))||[];
+  const users=getUsers();
+  if(rankIndex>=ranks.length) return;
+  const ctx=document.getElementById('chart').getContext('2d');
+  if(chart) chart.destroy();
+  const labels=[]; const datasets=[];
+  const maxDataLength=Math.max(...ranks.slice(0,rankIndex+1).map(r=>(users[r.name]?.records||[]).length));
+  for(let i=1;i<=maxDataLength;i++) labels.push(`${i}회`);
+  for(let i=0;i<=rankIndex;i++){
+    const name=ranks[i].name;
+    const data=users[name]?.records||[];
+    const color=colors[i%colors.length];
+    datasets.push({ label:`${name} 반응 속도`, data:data, borderColor:color, backgroundColor:`${color}40`, tension:0.3, fill:false, pointRadius:5, pointHoverRadius:7 });
+  }
+  chartData={labels,datasets};
+  chart=new Chart(ctx,{ type:'line', data:chartData, options:{ responsive:true, maintainAspectRatio:false, scales:{ y:{beginAtZero:true,grid:{color:'rgba(255,255,255,0.1)'},ticks:{color:'white'} }, x:{grid:{display:false},ticks:{color:'white'}} }, plugins:{legend:{labels:{color:'white'}}} } });
+  attempt=0; reactionTimes=[]; info.textContent=`0/${totalAttempts}회`; reaction.textContent=`반응 속도: -`;
+  clearTimeout(timeoutId); waiting=false;
+}
+
+// ----------------- 클릭 처리 -----------------
+function handleClick(e){
+  e.preventDefault(); game.classList.add('clicked');
+  setTimeout(()=>game.classList.remove('clicked'),100);
+  if(!waiting){ showPopup({ title:'게임을 먼저 시작해주세요!' }); return; }
+  if(game.classList.contains('bg-red-600')){
+    showPopup({ title:'부정행위 감지! 다음 라운드로 초기화됩니다.' });
+    clearTimeout(timeoutId); startRound(); return;
+  }
+  const reactionTime=(performance.now()-startTime).toFixed(2);
+  reactionTimes.push(Number(reactionTime));
+  attempt++;
+  info.textContent=`${attempt}/${totalAttempts}회`;
+  reaction.textContent=`반응 속도: ${reactionTime}ms`;
+  if(chart && chart.data.datasets.length>0){
+    const currentPlayerDataset=chart.data.datasets[0];
+    currentPlayerDataset.data.push(Number(reactionTime));
+    chart.data.labels=Array.from({length:attempt},(_,i)=>`${i+1}회`);
+    chart.update();
+  }
+  if(attempt>=totalAttempts) endGame(); else startRound();
+}
+
+// ----------------- 닉네임/비밀번호 입력 -----------------
+function enterGame(){
+  let name=nicknameInput.value.trim(); if(!name){ showPopup({ title:'닉네임을 입력하세요.' }); return; }
+  const users=getUsers();
+  function startGame(name){
+    playerName=name;
+    startModal.classList.add('hidden'); gameScreen.classList.remove('hidden');
+    gameControls.classList.remove('hidden'); gameInfo.classList.remove('hidden'); startNewGameBtn.classList.add('hidden');
+    initChart(); startRound();
+  }
+  if(users[name]){
+    showPopup({ title:'이미 등록된 닉네임입니다. 비밀번호를 입력하세요.', input:true, placeholder:'비밀번호 입력', onConfirm:(pwd)=>{
+      if(!pwd || !verifyPassword(name,pwd)) { showPopup({ title:'비밀번호가 틀렸습니다.' }); return; }
+      startGame(name);
+    }});
+  } else {
+    showPopup({ title:'새 닉네임입니다. 비밀번호를 설정하세요.', input:true, placeholder:'비밀번호 설정', onConfirm:(pwd)=>{
+      if(!pwd){ showPopup({ title:'비밀번호를 입력하세요.' }); return; }
+      users[name]={ password:pwd, records:[] }; localStorage.setItem('users',JSON.stringify(users));
+      startGame(name);
+    }});
+  }
+}
+
+// ----------------- 이벤트 -----------------
+nicknameInput.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); enterGame(); } });
+startBtn.addEventListener('click', enterGame);
+startNewGameBtn.addEventListener('click', ()=>{ gameScreen.classList.add('hidden'); startModal.classList.remove('hidden'); });
+['click','touchstart'].forEach(evt=>game.addEventListener(evt, handleClick));
+resetBtn.addEventListener('click', ()=>{
+  showPopup({ title:'초기화 암호를 입력하세요:', input:true, placeholder:'암호 입력', onConfirm:(pwd)=>{
+    if(pwd==='1950'){ localStorage.removeItem('ranking'); localStorage.removeItem('users'); renderRanking(ranking); renderRanking(mainRanking); if(chart) chart.destroy(); showPopup({ title:'랭킹 초기화 완료' }); }
+    else showPopup({ title:'암호가 틀렸습니다.' });
+  }});
+});
+
+renderRanking(ranking); renderRanking(mainRanking);
+</script>
+</body>
+</html>
