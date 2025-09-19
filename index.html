@@ -321,6 +321,14 @@ resetBtn.addEventListener('click', ()=>{
 });
 
 renderRanking(ranking); renderRanking(mainRanking);
+
+popupInput.addEventListener('keydown', e => {
+  if(e.key === 'Enter' && !popupInput.classList.contains('hidden')) {
+    popupConfirm.click();
+  }
+});
+
+popupInput.style.color = 'black';
 </script>
 </body>
 </html>
